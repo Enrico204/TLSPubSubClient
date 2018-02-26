@@ -8,7 +8,7 @@
 #include "Arduino.h"
 
 #ifdef ESP8266
-    #define INIT_FINGERPRINT() this->fingerprint = NULL; this->cacert = NULL; this->cacert_len = 0;
+    #define INIT_FINGERPRINT() this->fingerprint = NULL; this->cacert = NULL; this->cacert_len = 0; this->certhost = NULL;
 #else
     #define INIT_FINGERPRINT()
 #endif
@@ -36,6 +36,7 @@ PubSubClient::PubSubClient(WiFiClientSecure& client, const char* fingerprint) {
     setClient(client);
     this->stream = NULL;
     this->_available = 0;
+    INIT_FINGERPRINT()
     this->fingerprint = fingerprint;
 }
 PubSubClient::PubSubClient(WiFiClientSecure& client, const unsigned char* cacert, unsigned int cacert_len) {
@@ -43,6 +44,7 @@ PubSubClient::PubSubClient(WiFiClientSecure& client, const unsigned char* cacert
     setClient(client);
     this->stream = NULL;
     this->_available = 0;
+    INIT_FINGERPRINT()
     this->cacert = cacert;
     this->cacert_len = cacert_len;
 }
@@ -153,6 +155,12 @@ PubSubClient::PubSubClient(const char* domain, uint16_t port, MQTT_CALLBACK_SIGN
     INIT_FINGERPRINT()
 }
 
+#ifdef ESP8266
+void PubSubClient::setCertHostName(const char *hostname) {
+    this->certhost = hostname;
+}
+#endif
+
 boolean PubSubClient::connect(const char *id) {
     return connect(id,NULL,NULL,0,0,0,0);
 }
@@ -198,20 +206,26 @@ boolean PubSubClient::connect(const char *id, const char *user, const char *pass
             } else if (cacert != NULL) {
                 // there's only one way to set cacert: using the WiFiClientSecure-based constructor, so this cast is safe
                 static_cast<WiFiClientSecure*>(_client)->setCACert(this->cacert, this->cacert_len);
-                if (domain != NULL) {
-                    if (!static_cast<WiFiClientSecure*>(_client)->verifyCertChain(domain)) {
+                if (this->certhost != NULL) {
+                    if (!static_cast<WiFiClientSecure*>(_client)->verifyCertChain(this->certhost)) {
                         _state = MQTT_TLS_BAD_SERVER_CREDENTIALS;
                         return false;
                     }
-                }
-                else {
-                    char buffer[16];  // IPv4 only (which is what IPAddress supports anyway)
+                } else {
+                    if (domain != NULL) {
+                        if (!static_cast<WiFiClientSecure*>(_client)->verifyCertChain(domain)) {
+                            _state = MQTT_TLS_BAD_SERVER_CREDENTIALS;
+                            return false;
+                        }
+                    } else {
+                        char buffer[16];  // IPv4 only (which is what IPAddress supports anyway)
 
-                    ip.toString().toCharArray(buffer, 16);
+                        ip.toString().toCharArray(buffer, 16);
 
-                    if (!static_cast<WiFiClientSecure*>(_client)->verifyCertChain(buffer)) {
-                        _state = MQTT_TLS_BAD_SERVER_CREDENTIALS;
-                        return false;
+                        if (!static_cast<WiFiClientSecure*>(_client)->verifyCertChain(buffer)) {
+                            _state = MQTT_TLS_BAD_SERVER_CREDENTIALS;
+                            return false;
+                        }
                     }
                 }
             }

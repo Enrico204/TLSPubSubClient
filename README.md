@@ -1,3 +1,15 @@
+# TLSPubSubClient
+
+This is a library based on PubSubClient (knolleary) and some modifications made by @diegopx and me.
+
+This library provides an MQTT client that is capable of TLS connection with certificate chain verification (and SNI).
+
+In addition, by using `setCertHostName` method, the hostname in the certificate can be overridden. This is useful when you need to provide a different SNI other than the hostname written into the server certificate.
+
+Below you can find the original manual. **Note**: modifications above works only on ESP8266/NodeMCU.
+
+**This library is a fork intended for drop-in replacement, so it cannot be used with the official PubSubClient at the same time**
+
 # Arduino Client for MQTT
 
 This library provides a client for doing simple publish/subscribe messaging with

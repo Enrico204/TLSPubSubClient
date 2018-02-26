@@ -111,6 +111,7 @@ private:
    const char* fingerprint;
    const unsigned char* cacert;
    unsigned int cacert_len;
+   const char* certhost;
 #endif
 
 public:
@@ -132,6 +133,8 @@ public:
 #ifdef ESP8266
    PubSubClient(WiFiClientSecure& client, const char* fingerprint);
    PubSubClient(WiFiClientSecure& client, const unsigned char* cacert, unsigned int cacert_len);
+
+   void setCertHostName(const char *certhost);
 #endif
 
    PubSubClient& setServer(IPAddress ip, uint16_t port);
