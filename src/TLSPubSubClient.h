@@ -109,8 +109,10 @@ private:
 
 #ifdef ESP8266
    const char* fingerprint;
+   const unsigned char* cacert;
+   unsigned int cacert_len;
 #endif
-   
+
 public:
    PubSubClient();
    PubSubClient(Client& client);
@@ -126,9 +128,10 @@ public:
    PubSubClient(const char*, uint16_t, Client& client, Stream&);
    PubSubClient(const char*, uint16_t, MQTT_CALLBACK_SIGNATURE,Client& client);
    PubSubClient(const char*, uint16_t, MQTT_CALLBACK_SIGNATURE,Client& client, Stream&);
-   
+
 #ifdef ESP8266
    PubSubClient(WiFiClientSecure& client, const char* fingerprint);
+   PubSubClient(WiFiClientSecure& client, const unsigned char* cacert, unsigned int cacert_len);
 #endif
 
    PubSubClient& setServer(IPAddress ip, uint16_t port);

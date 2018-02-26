@@ -4,11 +4,11 @@
   http://knolleary.net
 */
 
-#include "PubSubClient.h"
+#include "TLSPubSubClient.h"
 #include "Arduino.h"
 
 #ifdef ESP8266
-    #define INIT_FINGERPRINT() this->fingerprint = NULL;
+    #define INIT_FINGERPRINT() this->fingerprint = NULL; this->cacert = NULL; this->cacert_len = 0;
 #else
     #define INIT_FINGERPRINT()
 #endif
@@ -37,6 +37,14 @@ PubSubClient::PubSubClient(WiFiClientSecure& client, const char* fingerprint) {
     this->stream = NULL;
     this->_available = 0;
     this->fingerprint = fingerprint;
+}
+PubSubClient::PubSubClient(WiFiClientSecure& client, const unsigned char* cacert, unsigned int cacert_len) {
+    this->_state = MQTT_DISCONNECTED;
+    setClient(client);
+    this->stream = NULL;
+    this->_available = 0;
+    this->cacert = cacert;
+    this->cacert_len = cacert_len;
 }
 #endif
 
@@ -166,30 +174,49 @@ boolean PubSubClient::connect(const char *id, const char *user, const char *pass
         } else {
             result = _client->connect(this->ip, this->port);
         }
-        
-#ifdef ESP8266
-        if (fingerprint != NULL) {
-            if (domain != NULL) {
-                // there's only one way to set fingerprint: using the WiFiClientSecure-based constructor, so this cast is safe
-                if (!static_cast<WiFiClientSecure*>(_client)->verify(fingerprint, domain)) {
-                    _state = MQTT_TLS_BAD_SERVER_CREDENTIALS;
-                    return false;
-                }
-            }
-            else {
-                char buffer[16];  // IPv4 only (which is what IPAddress supports anyway)
-                
-                ip.toString().toCharArray(buffer, 16);
-                
-                if (!static_cast<WiFiClientSecure*>(_client)->verify(fingerprint, buffer)) {
-                    _state = MQTT_TLS_BAD_SERVER_CREDENTIALS;
-                    return false;
-                }
-            }
-        }
-#endif
-        
+
         if (result == 1) {
+#ifdef ESP8266
+            if (fingerprint != NULL) {
+                if (domain != NULL) {
+                    // there's only one way to set fingerprint: using the WiFiClientSecure-based constructor, so this cast is safe
+                    if (!static_cast<WiFiClientSecure*>(_client)->verify(fingerprint, domain)) {
+                        _state = MQTT_TLS_BAD_SERVER_CREDENTIALS;
+                        return false;
+                    }
+                }
+                else {
+                    char buffer[16];  // IPv4 only (which is what IPAddress supports anyway)
+
+                    ip.toString().toCharArray(buffer, 16);
+
+                    if (!static_cast<WiFiClientSecure*>(_client)->verify(fingerprint, buffer)) {
+                        _state = MQTT_TLS_BAD_SERVER_CREDENTIALS;
+                        return false;
+                    }
+                }
+            } else if (cacert != NULL) {
+                // there's only one way to set cacert: using the WiFiClientSecure-based constructor, so this cast is safe
+                static_cast<WiFiClientSecure*>(_client)->setCACert(this->cacert, this->cacert_len);
+                if (domain != NULL) {
+                    if (!static_cast<WiFiClientSecure*>(_client)->verifyCertChain(domain)) {
+                        _state = MQTT_TLS_BAD_SERVER_CREDENTIALS;
+                        return false;
+                    }
+                }
+                else {
+                    char buffer[16];  // IPv4 only (which is what IPAddress supports anyway)
+
+                    ip.toString().toCharArray(buffer, 16);
+
+                    if (!static_cast<WiFiClientSecure*>(_client)->verifyCertChain(buffer)) {
+                        _state = MQTT_TLS_BAD_SERVER_CREDENTIALS;
+                        return false;
+                    }
+                }
+            }
+#endif
+
             nextMsgId = 1;
             // Leave room in the buffer for header and variable length field
             uint16_t length = 5;
@@ -374,7 +401,7 @@ boolean PubSubClient::loop() {
                     pingOutstanding = true;
                 }
             }
-            
+
             if (available()) {
                 uint8_t llen;
                 uint16_t len = readPacket(&llen);
@@ -394,14 +421,14 @@ boolean PubSubClient::loop() {
                                 msgId = (buffer[llen+3+tl]<<8)+buffer[llen+3+tl+1];
                                 payload = buffer+llen+3+tl+2;
                                 callback(topic,payload,len-llen-3-tl-2);
-            
+
                                 buffer[0] = MQTTPUBACK;
                                 buffer[1] = 2;
                                 buffer[2] = (msgId >> 8);
                                 buffer[3] = (msgId & 0xFF);
                                 _client->write(buffer,4);
                                 lastOutActivity = t;
-            
+
                             } else {
                                 payload = buffer+llen+3+tl;
                                 callback(topic,payload,len-llen-3-tl);
